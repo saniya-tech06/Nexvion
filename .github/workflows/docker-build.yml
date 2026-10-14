@@ -23,13 +23,28 @@ jobs:
       - name: Start website container
         run: docker run -d --name nexvion-test -p 8080:80 nexvion-website:ci
 
-      - name: Test website HTTP response
+      - name: Wait for Nginx to start
         run: |
-          curl --retry 10 --retry-connrefused --retry-delay 1 --fail http://localhost:8080/
-          curl --fail http://localhost:8080/products.html
-          curl --fail http://localhost:8080/payment.html
+          for i in {1..15}; do
+            if docker exec nexvion-test nginx -t && \
+               curl --silent --show-error --fail http://localhost:8080/ -o /dev/null; then
+              echo "Nginx is running and the homepage responds."
+              exit 0
+            fi
+            echo "Waiting for Nginx and the homepage... attempt $i"
+            sleep 2
+          done
+          docker logs nexvion-test
+          exit 1
 
-      - name: Display container logs if needed
+      - name: Test website pages
+        run: |
+          curl --silent --show-error --fail http://localhost:8080/ -o /dev/null
+          curl --silent --show-error --fail http://localhost:8080/products.html -o /dev/null
+          curl --silent --show-error --fail http://localhost:8080/payment.html -o /dev/null
+          echo "All three pages returned successful HTTP responses."
+
+      - name: Show container logs on failure
         if: failure()
         run: docker logs nexvion-test || true
 
